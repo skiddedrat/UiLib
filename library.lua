@@ -1,11 +1,23 @@
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
+local ContextActionService = game:GetService("ContextActionService")
 local TweenService = game:GetService("TweenService")
 local CoreGui = game:GetService("CoreGui")
 local HttpService = game:GetService("HttpService")
 local TextService = game:GetService("TextService")
 
 local LocalPlayer = Players.LocalPlayer
+
+local UI_FONT = Enum.Font.Rajdhani
+local UI_FONT_BOLD = Enum.Font.Rajdhani
+local UI_FONT_MONO = Enum.Font.Code
+
+local function fontWeight(weight)
+    if weight == "mono" then
+        return UI_FONT_MONO
+    end
+    return UI_FONT
+end
 
 local Library = {
     LogsEnabled = true,
@@ -24,6 +36,10 @@ local Library = {
     LoggerList = nil,
     LoggerScreen = nil,
     AnimationsEnabled = true,
+    InputLockCount = 0,
+    PreviousMouseBehavior = nil,
+    PreviousMouseIconEnabled = nil,
+    MovementState = nil,
     Theme = {
         Accent = Color3.fromRGB(166, 92, 255),
         AccentDark = Color3.fromRGB(105, 47, 206),
@@ -136,6 +152,64 @@ local function bindHover(button, enter, leave)
     end)
 end
 
+local function setPlayerMovementLocked(locked)
+    local character = LocalPlayer and LocalPlayer.Character
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+
+    if locked then
+        if Library.InputLockCount == 0 then
+            Library.PreviousMouseBehavior = UserInputService.MouseBehavior
+            Library.PreviousMouseIconEnabled = UserInputService.MouseIconEnabled
+        end
+
+        Library.InputLockCount = Library.InputLockCount + 1
+        UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+        UserInputService.MouseIconEnabled = true
+        ContextActionService:BindAction(
+            "UiLib_BlockMovement",
+            function() return Enum.ContextActionResult.Sink end,
+            false,
+            Enum.PlayerActions.CharacterForward,
+            Enum.PlayerActions.CharacterBackward,
+            Enum.PlayerActions.CharacterLeft,
+            Enum.PlayerActions.CharacterRight,
+            Enum.PlayerActions.CharacterJump
+        )
+
+        if humanoid and not Library.MovementState then
+            Library.MovementState = {
+                WalkSpeed = humanoid.WalkSpeed,
+                JumpPower = humanoid.JumpPower,
+                JumpHeight = humanoid.JumpHeight,
+                AutoRotate = humanoid.AutoRotate,
+            }
+            humanoid.WalkSpeed = 0
+            humanoid.JumpPower = 0
+            humanoid.JumpHeight = 0
+            humanoid.AutoRotate = false
+        end
+    else
+        Library.InputLockCount = math.max((Library.InputLockCount or 1) - 1, 0)
+        if Library.InputLockCount == 0 then
+            ContextActionService:UnbindAction("UiLib_BlockMovement")
+            if Library.PreviousMouseBehavior then
+                UserInputService.MouseBehavior = Library.PreviousMouseBehavior
+            end
+            if Library.PreviousMouseIconEnabled ~= nil then
+                UserInputService.MouseIconEnabled = Library.PreviousMouseIconEnabled
+            end
+
+            if humanoid and Library.MovementState then
+                humanoid.WalkSpeed = Library.MovementState.WalkSpeed or humanoid.WalkSpeed
+                humanoid.JumpPower = Library.MovementState.JumpPower or humanoid.JumpPower
+                humanoid.JumpHeight = Library.MovementState.JumpHeight or humanoid.JumpHeight
+                humanoid.AutoRotate = Library.MovementState.AutoRotate ~= false
+            end
+            Library.MovementState = nil
+        end
+    end
+end
+
 local function addSoftGlow(parent, radius, color, transparency)
     local glow = create("Frame", {
         Name = "SoftGlow",
@@ -166,7 +240,7 @@ end
 local function textLabel(text, size, color, bold)
     return create("TextLabel", {
         BackgroundTransparency = 1,
-        Font = bold and Enum.Font.GothamMedium or Enum.Font.Gotham,
+        Font = fontWeight(bold and "bold" or "regular"),
         Text = text or "",
         TextColor3 = color or Library.Theme.Text,
         TextSize = size or 14,
@@ -177,20 +251,9 @@ local function textLabel(text, size, color, bold)
 end
 
 local function applyUiFont(object, weight)
-    if not object then
-        return object
+    if object then
+        object.Font = fontWeight(weight)
     end
-
-    if weight == "mono" then
-        object.Font = Enum.Font.Code
-    elseif weight == "bold" then
-        object.Font = Enum.Font.GothamSemibold
-    elseif weight == "medium" then
-        object.Font = Enum.Font.GothamMedium
-    else
-        object.Font = Enum.Font.Gotham
-    end
-
     return object
 end
 
@@ -244,9 +307,7 @@ end
 local function getSectionIcon(name)
     name = string.lower(tostring(name or ""))
 
-    if string.find(name, "aim") or string.find(name, "combat") then
-        return "+"
-    elseif string.find(name, "target") then
+    if string.find(name, "target") then
         return "o"
     elseif string.find(name, "weapon") or string.find(name, "fire") then
         return ">"
@@ -268,17 +329,13 @@ end
 local function getPageIcon(name)
     name = string.lower(tostring(name or ""))
 
-    if string.find(name, "rage") or string.find(name, "combat") or string.find(name, "esp") then
-        return "+"
-    elseif string.find(name, "legit") then
-        return "o"
-    elseif string.find(name, "visual") then
+    if string.find(name, "visual") then
         return "O"
     elseif string.find(name, "player") then
         return "n"
     elseif string.find(name, "world") then
         return "@"
-    elseif string.find(name, "misc") or string.find(name, "exploit") then
+    elseif string.find(name, "misc") or string.find(name, "tool") then
         return "#"
     elseif string.find(name, "skin") or string.find(name, "inventory") then
         return "/"
@@ -286,10 +343,6 @@ local function getPageIcon(name)
         return "="
     elseif string.find(name, "setting") then
         return "*"
-    elseif string.find(name, "resolver") then
-        return "~"
-    elseif string.find(name, "anti") then
-        return "<"
     end
 
     return "+"
@@ -787,15 +840,31 @@ local function makeDraggable(handle, target, onRelease)
     end)
 end
 
-local function updateSwitch(track, knob, value)
+local function updateSwitch(track, knob, glow, value)
     local theme = Library.Theme
     local trackColor = value and theme.Accent or theme.Off
     local knobPosition = value and UDim2.new(1, -21, 0.5, -9) or UDim2.new(0, 3, 0.5, -9)
+    local trackStroke = track and track:FindFirstChildOfClass("UIStroke")
+
+    if glow then
+        glow.Visible = true
+        tween(glow, {BackgroundTransparency = value and 0.72 or 1}, 0.22)
+        task.delay(0.24, function()
+            if glow and glow.Parent and not value then
+                glow.Visible = false
+            end
+        end)
+    end
+
+    if trackStroke then
+        tween(trackStroke, {Color = value and theme.Accent or Color3.fromRGB(45, 48, 60), Transparency = value and 0.05 or 0.35}, 0.18)
+    end
 
     tween(track, {BackgroundColor3 = trackColor}, 0.18)
     tween(knob, {
         Position = knobPosition,
         BackgroundColor3 = value and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(130, 135, 150),
+        Size = value and UDim2.fromOffset(20, 20) or UDim2.fromOffset(18, 18),
     }, 0.18)
 end
 
@@ -836,7 +905,7 @@ local function ensureLogger()
     if not parent then
         if not Library.LoggerScreen or not Library.LoggerScreen.Parent then
             Library.LoggerScreen = create("ScreenGui", {
-                Name = "AmongusHookLogger",
+                Name = "UiLibLogger",
                 ResetOnSpawn = false,
                 IgnoreGuiInset = true,
                 DisplayOrder = 2147483647,
@@ -937,7 +1006,7 @@ function Section:Toggle(data)
     local labelButton = create("TextButton", {
         AutoButtonColor = false,
         BackgroundTransparency = 1,
-        Font = Enum.Font.Gotham,
+        Font = fontWeight(),
         Text = data.Name or "Toggle",
         TextColor3 = Library.Theme.Muted,
         TextSize = 15,
@@ -1042,7 +1111,7 @@ function Section:Toggle(data)
     function object:Set(value)
         self.Value = value == true
         setFlag(self.Flag, self.Value)
-        updateSwitch(track, knob, self.Value)
+        updateSwitch(track, knob, switchGlow, self.Value)
         switchGlow.Visible = self.Value
         labelButton.TextColor3 = self.Value and Library.Theme.Text or Library.Theme.Muted
         setCallback(data.Callback, self.Value)
@@ -1098,7 +1167,7 @@ function Section:Toggle(data)
 
     registerElement(object.Flag, object)
     setFlag(object.Flag, object.Value)
-    updateSwitch(track, knob, object.Value)
+    updateSwitch(track, knob, switchGlow, object.Value)
     switchGlow.Visible = object.Value
     labelButton.TextColor3 = object.Value and Library.Theme.Text or Library.Theme.Muted
 
@@ -1128,7 +1197,7 @@ function Section:Button(data)
     local button = create("TextButton", {
         AutoButtonColor = false,
         BackgroundColor3 = Color3.fromRGB(13, 15, 23),
-        Font = Enum.Font.GothamSemibold,
+        Font = fontWeight("bold"),
         Text = data.Name or "Button",
         TextColor3 = Library.Theme.Text,
         TextSize = 14,
@@ -1168,7 +1237,7 @@ function Section:Textbox(data)
     local box = create("TextBox", {
         BackgroundColor3 = Color3.fromRGB(9, 11, 17),
         ClearTextOnFocus = data.ClearTextOnFocus == true,
-        Font = Enum.Font.Gotham,
+        Font = fontWeight(),
         PlaceholderText = data.Placeholder or "",
         PlaceholderColor3 = Library.Theme.Muted,
         Position = UDim2.new(0, 145, 0, 4),
@@ -1208,16 +1277,16 @@ function Section:Slider(data)
     local minValue = data.Min or 0
     local maxValue = data.Max or 100
     local decimals = data.Decimals or 0
-    local row = self:_createRow(44)
+    local row = self:_createRow(50)
 
     local label = textLabel(data.Name or "Slider", 14, Library.Theme.Muted, false)
-    label.Size = UDim2.new(0, 132, 1, 0)
+    label.Size = UDim2.new(0, 156, 1, 0)
     label.Parent = row
 
     local valueBox = create("Frame", {
         BackgroundColor3 = Color3.fromRGB(9, 11, 17),
-        Position = UDim2.new(1, -68, 0.5, -16),
-        Size = UDim2.fromOffset(64, 32),
+        Position = UDim2.new(1, -76, 0.5, -16),
+        Size = UDim2.fromOffset(72, 32),
         Parent = row,
     }, {corner(7), stroke(Color3.fromRGB(25, 27, 38), 1, 0.15)})
 
@@ -1228,10 +1297,19 @@ function Section:Slider(data)
 
     local track = create("Frame", {
         BackgroundColor3 = Color3.fromRGB(7, 8, 12),
-        Position = UDim2.new(0, 142, 0.5, -2),
-        Size = UDim2.new(1, -226, 0, 4),
+        Position = UDim2.new(0, 166, 0.5, -4),
+        Size = UDim2.new(1, -258, 0, 8),
         Parent = row,
-    }, {corner(4)})
+    }, {corner(8), stroke(Library.Theme.StrokeSoft, 1, 0.35)})
+
+    local trackGlow = create("Frame", {
+        BackgroundColor3 = Library.Theme.Glow,
+        BackgroundTransparency = 0.86,
+        Position = UDim2.fromOffset(-3, -3),
+        Size = UDim2.new(1, 6, 1, 6),
+        ZIndex = 0,
+        Parent = track,
+    }, {corner(10)})
 
     local fill = create("Frame", {
         BackgroundColor3 = Library.Theme.Accent,
@@ -1243,7 +1321,7 @@ function Section:Slider(data)
         BackgroundColor3 = Library.Theme.Accent,
         AnchorPoint = Vector2.new(0.5, 0.5),
         Position = UDim2.fromScale(0, 0.5),
-        Size = UDim2.fromOffset(14, 14),
+        Size = UDim2.fromOffset(16, 16),
         Parent = track,
     }, {corner(7)})
 
@@ -1251,8 +1329,8 @@ function Section:Slider(data)
         AutoButtonColor = false,
         BackgroundTransparency = 1,
         Text = "",
-        Position = UDim2.new(0, 142, 0, 0),
-        Size = UDim2.new(1, -226, 1, 0),
+        Position = UDim2.new(0, 166, 0, 0),
+        Size = UDim2.new(1, -258, 1, 0),
         Parent = row,
     })
 
@@ -1278,8 +1356,9 @@ function Section:Slider(data)
             percent = (object.Value - minValue) / (maxValue - minValue)
         end
 
-        fill.Size = UDim2.new(percent, 0, 1, 0)
-        knob.Position = UDim2.fromScale(percent, 0.5)
+        tween(fill, {Size = UDim2.new(percent, 0, 1, 0)}, dragging and 0.08 or 0.18)
+        tween(knob, {Position = UDim2.fromScale(percent, 0.5)}, dragging and 0.08 or 0.18)
+        tween(trackGlow, {BackgroundTransparency = dragging and 0.76 or 0.86}, 0.12)
         valueText.Text = formatNumber(object.Value, decimals, data.Suffix)
 
         setFlag(object.Flag, object.Value)
@@ -1375,7 +1454,7 @@ function Section:Dropdown(data)
         searchBox = create("TextBox", {
             BackgroundColor3 = Color3.fromRGB(7, 8, 12),
             ClearTextOnFocus = false,
-            Font = Enum.Font.Gotham,
+            Font = fontWeight(),
             PlaceholderText = "Search...",
             PlaceholderColor3 = Library.Theme.Muted,
             Text = "",
@@ -1438,7 +1517,7 @@ function Section:Dropdown(data)
                 AutoButtonColor = false,
                 BackgroundColor3 = selected and Color3.fromRGB(30, 22, 49) or Color3.fromRGB(9, 11, 17),
                 BorderSizePixel = 0,
-                Font = Enum.Font.Gotham,
+                Font = fontWeight(),
                 Text = object.Multi and ((selected and "[x] " or "[ ] ") .. tostring(item)) or tostring(item),
                 TextColor3 = selected and Library.Theme.Text or Library.Theme.Muted,
                 TextSize = 13,
@@ -1703,7 +1782,7 @@ function Section:Keybind(data)
         BackgroundColor3 = Color3.fromRGB(10, 12, 18),
         Position = UDim2.new(1, -108, 0.5, -15),
         Size = UDim2.fromOffset(104, 30),
-        Font = Enum.Font.Gotham,
+        Font = fontWeight(),
         Text = currentKey and currentKey.Name or "None",
         TextColor3 = Library.Theme.Text,
         TextSize = 13,
@@ -1901,7 +1980,13 @@ local Window = {}
 Window.__index = Window
 
 function Window:SetOpen(open)
+    local wasOpen = self.IsOpen == true
     self.IsOpen = open == true
+
+    if self.IsOpen ~= wasOpen then
+        setPlayerMovementLocked(self.IsOpen)
+    end
+
     if self.Gui then
         if self.IsOpen then
             self.Gui.Enabled = true
@@ -1971,7 +2056,7 @@ function Window:Page(data)
         AutoButtonColor = false,
         BackgroundColor3 = Color3.fromRGB(28, 24, 43),
         BackgroundTransparency = 1,
-        Font = Enum.Font.GothamSemibold,
+        Font = fontWeight("bold"),
         Text = data.Name or ("Page " .. tostring(index)),
         TextColor3 = Library.Theme.Muted,
         TextSize = 19,
@@ -1999,7 +2084,7 @@ function Window:Page(data)
     local topButton = create("TextButton", {
         AutoButtonColor = false,
         BackgroundTransparency = 1,
-        Font = Enum.Font.GothamSemibold,
+        Font = fontWeight("bold"),
         Text = getPageIcon(data.Name) .. "   " .. (data.Name or ("Page " .. tostring(index))),
         TextColor3 = Library.Theme.Muted,
         TextSize = 16,
@@ -2093,7 +2178,7 @@ function Library:Window(data)
     data = data or {}
 
     local gui = create("ScreenGui", {
-        Name = "AmongusHookLibrary",
+        Name = "UiLibrary",
         ResetOnSpawn = false,
         IgnoreGuiInset = true,
         DisplayOrder = 2147483647,
@@ -2186,10 +2271,11 @@ function Library:Window(data)
     end
 
     local logo
-    if data.Logo then
+    local logoImage = data.Logo or "rbxassetid://108498041910348"
+    if logoImage then
         logo = create("ImageLabel", {
             BackgroundTransparency = 1,
-            Image = normalizeImage(data.Logo),
+            Image = normalizeImage(logoImage),
             ImageColor3 = Color3.new(1, 1, 1),
             AnchorPoint = Vector2.new(0.5, 0),
             Position = UDim2.new(0.5, 0, 0, 34),
@@ -2197,13 +2283,9 @@ function Library:Window(data)
             Size = UDim2.fromOffset(134, 112),
             Parent = logoArea,
         })
-    else
-        logo = createCrewmateLogo(logoArea)
-        logo.AnchorPoint = Vector2.new(0.5, 0)
-        logo.Position = UDim2.new(0.5, 0, 0, 16)
     end
 
-    local displayName = data.Name or "Amongus.hook"
+    local displayName = data.Name or "UiLib"
     local nameHolder = create("Frame", {
         BackgroundTransparency = 1,
         Position = UDim2.fromOffset(0, 154),
@@ -2211,7 +2293,7 @@ function Library:Window(data)
         Parent = logoArea,
     })
 
-    local nameFont = Enum.Font.GothamSemibold
+    local nameFont = fontWeight("bold")
     local before, after = displayName, ""
     local dotPosition = string.find(displayName, "%.")
     if dotPosition then
@@ -2258,7 +2340,7 @@ function Library:Window(data)
         Parent = sidebar,
     }, {corner(8), stroke(self.Theme.StrokeSoft, 1, 0.25), padding(18, 13, 18, 13)})
 
-    local statusTitle = textLabel(data.Name or "Amongus.hook", 15, self.Theme.Accent, true)
+    local statusTitle = textLabel(data.Name or "UiLib", 15, self.Theme.Accent, true)
     statusTitle.Size = UDim2.new(1, -18, 0, 22)
     statusTitle.Parent = status
 
@@ -2289,7 +2371,7 @@ function Library:Window(data)
         Parent = gui,
     }, {corner(8), stroke(self.Theme.Stroke, 1, 0.2), padding(10, 0, 10, 0)})
 
-    local watermarkText = textLabel((data.Name or "Amongus.hook") .. " | loaded", 13, self.Theme.Text, true)
+    local watermarkText = textLabel((data.Name or "UiLib") .. " | loaded", 13, self.Theme.Text, true)
     watermarkText.Size = UDim2.fromScale(1, 1)
     watermarkText.Parent = watermark
 
@@ -2333,7 +2415,7 @@ function Library:Window(data)
         topTabs.CanvasSize = UDim2.fromOffset(topTabsLayout.AbsoluteContentSize.X + 8, 0)
     end)
 
-    local product = textLabel("CS2  -  Prime", 16, self.Theme.Text, true)
+    local product = textLabel(data.HeaderText or "Interface", 16, self.Theme.Text, true)
     product.AnchorPoint = Vector2.new(1, 0)
     product.Position = UDim2.new(1, -38, 0, 23)
     product.Size = UDim2.fromOffset(142, 28)
@@ -2351,7 +2433,7 @@ function Library:Window(data)
     local close = create("TextButton", {
         AutoButtonColor = false,
         BackgroundTransparency = 1,
-        Font = Enum.Font.GothamSemibold,
+        Font = fontWeight("bold"),
         Text = "X",
         TextColor3 = self.Theme.Muted,
         TextSize = 18,
@@ -2363,7 +2445,7 @@ function Library:Window(data)
     local minimize = create("TextButton", {
         AutoButtonColor = false,
         BackgroundTransparency = 1,
-        Font = Enum.Font.GothamSemibold,
+        Font = fontWeight("bold"),
         Text = "-",
         TextColor3 = self.Theme.Muted,
         TextSize = 20,
@@ -2395,6 +2477,8 @@ function Library:Window(data)
         ActivePage = nil,
         IsOpen = true,
     }, Window)
+
+    setPlayerMovementLocked(true)
 
     table.insert(self.Windows, window)
 
@@ -2432,7 +2516,7 @@ function Library:Log(text, duration, color)
 
     self.LogCounter = self.LogCounter + 1
     local message = tostring(text)
-    local textSize = TextService:GetTextSize(message, 13, Enum.Font.Gotham, Vector2.new(420, math.huge))
+    local textSize = TextService:GetTextSize(message, 13, fontWeight(), Vector2.new(420, math.huge))
     local width = clampNumber(textSize.X + 52, 190, 360)
 
     local toast = create("Frame", {
@@ -2586,6 +2670,10 @@ function Library:Unload()
 
     for _, window in ipairs(self.Windows) do
         if window.Gui then
+            if window.IsOpen then
+                setPlayerMovementLocked(false)
+                window.IsOpen = false
+            end
             window.Gui:Destroy()
         end
     end
