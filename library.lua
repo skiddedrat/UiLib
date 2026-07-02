@@ -1,5 +1,6 @@
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
+local ContextActionService = game:GetService("ContextActionService")
 local TweenService = game:GetService("TweenService")
 local CoreGui = game:GetService("CoreGui")
 local HttpService = game:GetService("HttpService")
@@ -11,7 +12,7 @@ local Library = {
     LogsEnabled = true,
     LogsVisible = true,
     CurrentScale = 1,
-    ConfigFolder = "AmongusHook/configs",
+    ConfigFolder = "UiLib/configs",
     WatermarkEnabled = true,
     Flags = {},
     Elements = {},
@@ -24,20 +25,24 @@ local Library = {
     LoggerList = nil,
     LoggerScreen = nil,
     Theme = {
-        Accent = Color3.fromRGB(160, 92, 255),
-        AccentDark = Color3.fromRGB(95, 42, 180),
-        Background = Color3.fromRGB(6, 8, 13),
-        Sidebar = Color3.fromRGB(8, 10, 16),
-        Panel = Color3.fromRGB(13, 15, 23),
-        PanelLight = Color3.fromRGB(18, 20, 30),
-        Stroke = Color3.fromRGB(42, 32, 68),
-        StrokeSoft = Color3.fromRGB(28, 30, 42),
-        Text = Color3.fromRGB(235, 236, 245),
-        Muted = Color3.fromRGB(160, 162, 175),
+        Accent = Color3.fromRGB(184, 118, 255),
+        AccentDark = Color3.fromRGB(101, 48, 198),
+        Background = Color3.fromRGB(5, 6, 11),
+        Sidebar = Color3.fromRGB(8, 9, 15),
+        Panel = Color3.fromRGB(13, 14, 22),
+        PanelLight = Color3.fromRGB(19, 21, 32),
+        Stroke = Color3.fromRGB(64, 42, 102),
+        StrokeSoft = Color3.fromRGB(32, 34, 50),
+        Text = Color3.fromRGB(244, 241, 255),
+        Muted = Color3.fromRGB(170, 166, 188),
         Off = Color3.fromRGB(44, 47, 58),
         Green = Color3.fromRGB(48, 224, 115),
     },
 }
+
+local FONT_FAMILY = "rbxasset://fonts/families/Rajdhani.json"
+local FONT_FALLBACK = Enum.Font.Gotham
+local FONT_FALLBACK_BOLD = Enum.Font.GothamSemibold
 
 local function getParent()
     if gethui then
@@ -65,6 +70,17 @@ local function create(className, properties, children)
 
     for property, value in pairs(properties or {}) do
         object[property] = value
+    end
+
+    if object:IsA("TextLabel") or object:IsA("TextButton") or object:IsA("TextBox") then
+        local weight = Enum.FontWeight.Medium
+        if properties and properties.Font == FONT_FALLBACK_BOLD then
+            weight = Enum.FontWeight.SemiBold
+        end
+
+        pcall(function()
+            object.FontFace = Font.new(FONT_FAMILY, weight, Enum.FontStyle.Normal)
+        end)
     end
 
     for _, child in ipairs(children or {}) do
@@ -137,7 +153,7 @@ end
 local function textLabel(text, size, color, bold)
     return create("TextLabel", {
         BackgroundTransparency = 1,
-        Font = bold and Enum.Font.GothamSemibold or Enum.Font.Gotham,
+        Font = bold and FONT_FALLBACK_BOLD or FONT_FALLBACK,
         Text = text or "",
         TextColor3 = color or Library.Theme.Text,
         TextSize = size or 14,
@@ -197,9 +213,7 @@ end
 local function getSectionIcon(name)
     name = string.lower(tostring(name or ""))
 
-    if string.find(name, "aim") or string.find(name, "combat") then
-        return "+"
-    elseif string.find(name, "target") then
+    if string.find(name, "combat") or string.find(name, "target") then
         return "o"
     elseif string.find(name, "weapon") or string.find(name, "fire") then
         return ">"
@@ -394,8 +408,8 @@ end
 
 local function ensureConfigFolder()
     if type(isfolder) == "function" and type(makefolder) == "function" then
-        if not isfolder("AmongusHook") then
-            pcall(makefolder, "AmongusHook")
+        if not isfolder("UiLib") then
+            pcall(makefolder, "UiLib")
         end
         if not isfolder(Library.ConfigFolder) then
             pcall(makefolder, Library.ConfigFolder)
@@ -710,13 +724,35 @@ local function makeDraggable(handle, target, onRelease)
     end)
 end
 
-local function updateSwitch(track, knob, value)
+local function updateSwitch(track, knob, value, glow, trackStroke)
     local theme = Library.Theme
     local trackColor = value and theme.Accent or theme.Off
     local knobPosition = value and UDim2.new(1, -19, 0.5, -8) or UDim2.new(0, 3, 0.5, -8)
 
-    tween(track, {BackgroundColor3 = trackColor}, 0.14)
-    tween(knob, {Position = knobPosition}, 0.14)
+    tween(track, {BackgroundColor3 = trackColor}, 0.2)
+    tween(knob, {
+        Position = knobPosition,
+        BackgroundColor3 = value and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(222, 224, 235),
+    }, 0.2)
+
+    if glow then
+        glow.Visible = true
+        tween(glow, {BackgroundTransparency = value and 0.62 or 1}, 0.2)
+        if not value then
+            task.delay(0.22, function()
+                if glow and glow.Parent and not value then
+                    glow.Visible = false
+                end
+            end)
+        end
+    end
+
+    if trackStroke then
+        tween(trackStroke, {
+            Color = value and theme.Accent or Color3.fromRGB(60, 62, 76),
+            Transparency = value and 0.05 or 0.35,
+        }, 0.2)
+    end
 end
 
 local function applySmartSnap(frame)
@@ -756,7 +792,7 @@ local function ensureLogger()
     if not parent then
         if not Library.LoggerScreen or not Library.LoggerScreen.Parent then
             Library.LoggerScreen = create("ScreenGui", {
-                Name = "AmongusHookLogger",
+                Name = "UiLibLogger",
                 ResetOnSpawn = false,
                 IgnoreGuiInset = true,
                 DisplayOrder = 2147483647,
@@ -886,17 +922,20 @@ function Section:Toggle(data)
         BackgroundColor3 = Library.Theme.Off,
         Size = UDim2.fromScale(1, 1),
         Parent = button,
-    }, {corner(12), stroke(Color3.fromRGB(60, 62, 76), 1, 0.35)})
+    }, {corner(12)})
+
+    local trackStroke = stroke(Color3.fromRGB(60, 62, 76), 1, 0.35)
+    trackStroke.Parent = track
 
     local switchGlow = create("Frame", {
         BackgroundColor3 = Library.Theme.Accent,
-        BackgroundTransparency = 0.78,
-        Position = UDim2.fromOffset(-3, -3),
-        Size = UDim2.new(1, 6, 1, 6),
+        BackgroundTransparency = 1,
+        Position = UDim2.fromOffset(-5, -5),
+        Size = UDim2.new(1, 10, 1, 10),
         Visible = false,
         ZIndex = 0,
         Parent = button,
-    }, {corner(15)})
+    }, {corner(18)})
 
     local knob = create("Frame", {
         BackgroundColor3 = Color3.fromRGB(230, 230, 240),
@@ -962,8 +1001,7 @@ function Section:Toggle(data)
     function object:Set(value)
         self.Value = value == true
         setFlag(self.Flag, self.Value)
-        updateSwitch(track, knob, self.Value)
-        switchGlow.Visible = self.Value
+        updateSwitch(track, knob, self.Value, switchGlow, trackStroke)
         labelButton.TextColor3 = self.Value and Library.Theme.Text or Library.Theme.Muted
         setCallback(data.Callback, self.Value)
     end
@@ -1018,8 +1056,7 @@ function Section:Toggle(data)
 
     registerElement(object.Flag, object)
     setFlag(object.Flag, object.Value)
-    updateSwitch(track, knob, object.Value)
-    switchGlow.Visible = object.Value
+    updateSwitch(track, knob, object.Value, switchGlow, trackStroke)
     labelButton.TextColor3 = object.Value and Library.Theme.Text or Library.Theme.Muted
 
     connect(button.MouseButton1Click, function()
@@ -1147,11 +1184,19 @@ function Section:Slider(data)
     valueText.Parent = valueBox
 
     local track = create("Frame", {
-        BackgroundColor3 = Color3.fromRGB(8, 9, 14),
+        BackgroundColor3 = Color3.fromRGB(9, 10, 16),
         Position = UDim2.new(0, 145, 0.5, -2),
-        Size = UDim2.new(1, -225, 0, 4),
+        Size = UDim2.new(1, -225, 0, 5),
         Parent = row,
-    }, {corner(4)})
+    }, {corner(5), stroke(Library.Theme.StrokeSoft, 1, 0.55)})
+
+    local sliderGlow = create("Frame", {
+        BackgroundColor3 = Library.Theme.Accent,
+        BackgroundTransparency = 0.82,
+        Position = UDim2.fromOffset(-1, -1),
+        Size = UDim2.new(0, 0, 1, 2),
+        Parent = track,
+    }, {corner(6)})
 
     local fill = create("Frame", {
         BackgroundColor3 = Library.Theme.Accent,
@@ -1163,9 +1208,9 @@ function Section:Slider(data)
         BackgroundColor3 = Library.Theme.Accent,
         AnchorPoint = Vector2.new(0.5, 0.5),
         Position = UDim2.fromScale(0, 0.5),
-        Size = UDim2.fromOffset(13, 13),
+        Size = UDim2.fromOffset(15, 15),
         Parent = track,
-    }, {corner(7)})
+    }, {corner(8), stroke(Color3.fromRGB(241, 230, 255), 1, 0.25)})
 
     local button = create("TextButton", {
         AutoButtonColor = false,
@@ -1198,8 +1243,9 @@ function Section:Slider(data)
             percent = (object.Value - minValue) / (maxValue - minValue)
         end
 
-        fill.Size = UDim2.new(percent, 0, 1, 0)
-        knob.Position = UDim2.fromScale(percent, 0.5)
+        tween(fill, {Size = UDim2.new(percent, 0, 1, 0)}, dragging and 0.08 or 0.18)
+        tween(sliderGlow, {Size = UDim2.new(percent, 2, 1, 2)}, dragging and 0.08 or 0.18)
+        tween(knob, {Position = UDim2.fromScale(percent, 0.5)}, dragging and 0.08 or 0.18)
         valueText.Text = formatNumber(object.Value, decimals, data.Suffix)
 
         setFlag(object.Flag, object.Value)
@@ -1538,7 +1584,7 @@ function Section:Colorpicker(data)
             local alpha = (input.Position.X - track.AbsolutePosition.X) / math.max(track.AbsoluteSize.X, 1)
             alpha = clampNumber(alpha, 0, 1)
             setValue(math.floor(alpha * maxValue + 0.5))
-            fill.Size = UDim2.fromScale(alpha, 1)
+            tween(fill, {Size = UDim2.fromScale(alpha, 1)}, dragging and 0.08 or 0.16)
             valueText.Text = tostring(getValue())
             applyColor(true)
         end
@@ -1819,10 +1865,121 @@ end
 local Window = {}
 Window.__index = Window
 
+local function getPlayerControls()
+    local playerScripts = LocalPlayer and LocalPlayer:FindFirstChildOfClass("PlayerScripts")
+    if not playerScripts then
+        return nil
+    end
+
+    local playerModule = playerScripts:FindFirstChild("PlayerModule")
+    if not playerModule then
+        return nil
+    end
+
+    local ok, module = pcall(require, playerModule)
+    if not ok or not module or not module.GetControls then
+        return nil
+    end
+
+    local controlsOk, controls = pcall(function()
+        return module:GetControls()
+    end)
+
+    if controlsOk then
+        return controls
+    end
+
+    return nil
+end
+
+local function sinkMovement()
+    return Enum.ContextActionResult.Sink
+end
+
+function Window:_lockInput()
+    if self.InputLocked then
+        UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+        UserInputService.MouseIconEnabled = true
+        return
+    end
+
+    self.InputLocked = true
+    self.PreviousMouseBehavior = UserInputService.MouseBehavior
+    self.PreviousMouseIconEnabled = UserInputService.MouseIconEnabled
+
+    UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+    UserInputService.MouseIconEnabled = true
+
+    self.PlayerControls = getPlayerControls()
+    if self.PlayerControls and self.PlayerControls.Disable then
+        pcall(function()
+            self.PlayerControls:Disable()
+        end)
+    end
+
+    self.MovementActionName = "UiLibBlockMovement_" .. tostring(self.Gui)
+    pcall(function()
+        ContextActionService:BindAction(
+            self.MovementActionName,
+            sinkMovement,
+            false,
+            Enum.PlayerActions.CharacterForward,
+            Enum.PlayerActions.CharacterBackward,
+            Enum.PlayerActions.CharacterLeft,
+            Enum.PlayerActions.CharacterRight,
+            Enum.PlayerActions.CharacterJump,
+            Enum.KeyCode.W,
+            Enum.KeyCode.A,
+            Enum.KeyCode.S,
+            Enum.KeyCode.D,
+            Enum.KeyCode.Space,
+            Enum.KeyCode.LeftShift
+        )
+    end)
+end
+
+function Window:_unlockInput()
+    if not self.InputLocked then
+        return
+    end
+
+    self.InputLocked = false
+
+    if self.MovementActionName then
+        pcall(function()
+            ContextActionService:UnbindAction(self.MovementActionName)
+        end)
+        self.MovementActionName = nil
+    end
+
+    if self.PlayerControls and self.PlayerControls.Enable then
+        pcall(function()
+            self.PlayerControls:Enable()
+        end)
+    end
+    self.PlayerControls = nil
+
+    if self.PreviousMouseBehavior then
+        UserInputService.MouseBehavior = self.PreviousMouseBehavior
+        self.PreviousMouseBehavior = nil
+    end
+
+    if self.PreviousMouseIconEnabled ~= nil then
+        UserInputService.MouseIconEnabled = self.PreviousMouseIconEnabled
+        self.PreviousMouseIconEnabled = nil
+    end
+end
+
 function Window:SetOpen(open)
     self.IsOpen = open == true
     if self.Gui then
         self.Gui.Enabled = self.IsOpen
+    end
+
+    if self.IsOpen then
+        self:_lockInput()
+    else
+        self:_unlockInput()
     end
 end
 
@@ -1976,7 +2133,7 @@ function Library:Window(data)
     data = data or {}
 
     local gui = create("ScreenGui", {
-        Name = "AmongusHookLibrary",
+        Name = "UiLibrary",
         ResetOnSpawn = false,
         IgnoreGuiInset = true,
         DisplayOrder = 2147483647,
@@ -2041,10 +2198,10 @@ function Library:Window(data)
     })
 
     local logo
-    if data.Logo then
+    if data.Logo ~= false then
         logo = create("ImageLabel", {
             BackgroundTransparency = 1,
-            Image = normalizeImage(data.Logo),
+            Image = normalizeImage(data.Logo or "rbxassetid://108498041910348"),
             ImageColor3 = Color3.new(1, 1, 1),
             AnchorPoint = Vector2.new(0.5, 0),
             Position = UDim2.new(0.5, 0, 0, 18),
@@ -2058,13 +2215,13 @@ function Library:Window(data)
         logo.Position = UDim2.new(0.5, 0, 0, 16)
     end
 
-    local name = textLabel(data.Name or "Amongus.hook", 20, self.Theme.Text, true)
+    local name = textLabel(data.Name or "UiLib", 20, self.Theme.Text, true)
     name.TextXAlignment = Enum.TextXAlignment.Center
     name.Position = UDim2.fromOffset(0, 104)
     name.Size = UDim2.new(1, 0, 0, 26)
     name.Parent = logoArea
 
-    local subName = textLabel(data.SubName or "CS2 CHEAT", 11, self.Theme.Accent, true)
+    local subName = textLabel(data.SubName or "Interface Library", 11, self.Theme.Accent, true)
     subName.TextXAlignment = Enum.TextXAlignment.Center
     subName.Position = UDim2.fromOffset(0, 130)
     subName.Size = UDim2.new(1, 0, 0, 18)
@@ -2085,7 +2242,7 @@ function Library:Window(data)
         Parent = sidebar,
     }, {corner(8), stroke(self.Theme.StrokeSoft, 1, 0.25), padding(12, 9, 12, 9)})
 
-    local statusTitle = textLabel(data.Name or "Amongus.hook", 13, self.Theme.Accent, true)
+    local statusTitle = textLabel(data.Name or "UiLib", 13, self.Theme.Accent, true)
     statusTitle.Size = UDim2.new(1, -18, 0, 18)
     statusTitle.Parent = status
 
@@ -2102,7 +2259,7 @@ function Library:Window(data)
     version.Size = UDim2.new(1, 0, 0, 16)
     version.Parent = status
 
-    local injected = textLabel("Status: Injected", 12, self.Theme.Green, false)
+    local injected = textLabel(data.StatusText or "Status: Ready", 12, self.Theme.Green, false)
     injected.Position = UDim2.fromOffset(0, 42)
     injected.Size = UDim2.new(1, 0, 0, 16)
     injected.Parent = status
@@ -2116,7 +2273,7 @@ function Library:Window(data)
         Parent = gui,
     }, {corner(8), stroke(self.Theme.Stroke, 1, 0.2), padding(10, 0, 10, 0)})
 
-    local watermarkText = textLabel((data.Name or "Amongus.hook") .. " | loaded", 13, self.Theme.Text, true)
+    local watermarkText = textLabel((data.Name or "UiLib") .. " | loaded", 13, self.Theme.Text, true)
     watermarkText.Size = UDim2.fromScale(1, 1)
     watermarkText.Parent = watermark
 
@@ -2160,7 +2317,7 @@ function Library:Window(data)
         topTabs.CanvasSize = UDim2.fromOffset(topTabsLayout.AbsoluteContentSize.X + 8, 0)
     end)
 
-    local product = textLabel("CS2  -  Prime", 14, self.Theme.Text, true)
+    local product = textLabel(data.ProductText or "UI Library", 14, self.Theme.Text, true)
     product.AnchorPoint = Vector2.new(1, 0)
     product.Position = UDim2.new(1, -36, 0, 15)
     product.Size = UDim2.fromOffset(120, 28)
@@ -2234,7 +2391,7 @@ function Library:Window(data)
 
     makeDraggable(top, main)
 
-    local menuKeybind = data.MenuKeybind or Enum.KeyCode.End
+    local menuKeybind = data.MenuKeybind or Enum.KeyCode.RightShift
     connect(UserInputService.InputBegan, function(input, gameProcessed)
         if gameProcessed then
             return
@@ -2244,6 +2401,8 @@ function Library:Window(data)
             window:SetOpen(not window.IsOpen)
         end
     end)
+
+    window:SetOpen(true)
 
     return window
 end
@@ -2411,6 +2570,9 @@ function Library:Unload()
     clearTable(self.Connections)
 
     for _, window in ipairs(self.Windows) do
+        if window._unlockInput then
+            window:_unlockInput()
+        end
         if window.Gui then
             window.Gui:Destroy()
         end
