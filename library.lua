@@ -23,18 +23,20 @@ local Library = {
     LoggerPanel = nil,
     LoggerList = nil,
     LoggerScreen = nil,
+    AnimationsEnabled = true,
     Theme = {
-        Accent = Color3.fromRGB(160, 92, 255),
-        AccentDark = Color3.fromRGB(95, 42, 180),
-        Background = Color3.fromRGB(6, 8, 13),
-        Sidebar = Color3.fromRGB(8, 10, 16),
-        Panel = Color3.fromRGB(13, 15, 23),
-        PanelLight = Color3.fromRGB(18, 20, 30),
-        Stroke = Color3.fromRGB(42, 32, 68),
-        StrokeSoft = Color3.fromRGB(28, 30, 42),
-        Text = Color3.fromRGB(235, 236, 245),
-        Muted = Color3.fromRGB(160, 162, 175),
-        Off = Color3.fromRGB(44, 47, 58),
+        Accent = Color3.fromRGB(166, 92, 255),
+        AccentDark = Color3.fromRGB(105, 47, 206),
+        Background = Color3.fromRGB(5, 7, 11),
+        Sidebar = Color3.fromRGB(7, 8, 13),
+        Panel = Color3.fromRGB(12, 14, 21),
+        PanelLight = Color3.fromRGB(17, 19, 28),
+        Stroke = Color3.fromRGB(55, 36, 88),
+        StrokeSoft = Color3.fromRGB(31, 34, 47),
+        Text = Color3.fromRGB(240, 240, 248),
+        Muted = Color3.fromRGB(164, 166, 178),
+        Off = Color3.fromRGB(34, 37, 47),
+        Glow = Color3.fromRGB(142, 75, 255),
         Green = Color3.fromRGB(48, 224, 115),
     },
 }
@@ -134,10 +136,37 @@ local function bindHover(button, enter, leave)
     end)
 end
 
+local function addSoftGlow(parent, radius, color, transparency)
+    local glow = create("Frame", {
+        Name = "SoftGlow",
+        BackgroundColor3 = color or Library.Theme.Glow,
+        BackgroundTransparency = transparency or 0.84,
+        Position = UDim2.fromOffset(-(radius or 12), -(radius or 12)),
+        Size = UDim2.new(1, (radius or 12) * 2, 1, (radius or 12) * 2),
+        ZIndex = 0,
+        Parent = parent,
+    }, {corner((radius or 12) + 14)})
+
+    local gradient = create("UIGradient", {
+        Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0, color or Library.Theme.Glow),
+            ColorSequenceKeypoint.new(1, Color3.fromRGB(15, 18, 28)),
+        }),
+        Transparency = NumberSequence.new({
+            NumberSequenceKeypoint.new(0, 0.15),
+            NumberSequenceKeypoint.new(1, 1),
+        }),
+        Rotation = 90,
+        Parent = glow,
+    })
+
+    return glow, gradient
+end
+
 local function textLabel(text, size, color, bold)
     return create("TextLabel", {
         BackgroundTransparency = 1,
-        Font = bold and Enum.Font.GothamSemibold or Enum.Font.Gotham,
+        Font = bold and Enum.Font.GothamMedium or Enum.Font.Gotham,
         Text = text or "",
         TextColor3 = color or Library.Theme.Text,
         TextSize = size or 14,
@@ -145,6 +174,24 @@ local function textLabel(text, size, color, bold)
         TextYAlignment = Enum.TextYAlignment.Center,
         TextTruncate = Enum.TextTruncate.AtEnd,
     })
+end
+
+local function applyUiFont(object, weight)
+    if not object then
+        return object
+    end
+
+    if weight == "mono" then
+        object.Font = Enum.Font.Code
+    elseif weight == "bold" then
+        object.Font = Enum.Font.GothamSemibold
+    elseif weight == "medium" then
+        object.Font = Enum.Font.GothamMedium
+    else
+        object.Font = Enum.Font.Gotham
+    end
+
+    return object
 end
 
 local function normalizeImage(image)
@@ -213,6 +260,36 @@ local function getSectionIcon(name)
         return "@"
     elseif string.find(name, "config") or string.find(name, "profile") or string.find(name, "setting") then
         return "="
+    end
+
+    return "+"
+end
+
+local function getPageIcon(name)
+    name = string.lower(tostring(name or ""))
+
+    if string.find(name, "rage") or string.find(name, "combat") or string.find(name, "esp") then
+        return "+"
+    elseif string.find(name, "legit") then
+        return "o"
+    elseif string.find(name, "visual") then
+        return "O"
+    elseif string.find(name, "player") then
+        return "n"
+    elseif string.find(name, "world") then
+        return "@"
+    elseif string.find(name, "misc") or string.find(name, "exploit") then
+        return "#"
+    elseif string.find(name, "skin") or string.find(name, "inventory") then
+        return "/"
+    elseif string.find(name, "config") or string.find(name, "profile") then
+        return "="
+    elseif string.find(name, "setting") then
+        return "*"
+    elseif string.find(name, "resolver") then
+        return "~"
+    elseif string.find(name, "anti") then
+        return "<"
     end
 
     return "+"
@@ -713,10 +790,13 @@ end
 local function updateSwitch(track, knob, value)
     local theme = Library.Theme
     local trackColor = value and theme.Accent or theme.Off
-    local knobPosition = value and UDim2.new(1, -19, 0.5, -8) or UDim2.new(0, 3, 0.5, -8)
+    local knobPosition = value and UDim2.new(1, -21, 0.5, -9) or UDim2.new(0, 3, 0.5, -9)
 
-    tween(track, {BackgroundColor3 = trackColor}, 0.14)
-    tween(knob, {Position = knobPosition}, 0.14)
+    tween(track, {BackgroundColor3 = trackColor}, 0.18)
+    tween(knob, {
+        Position = knobPosition,
+        BackgroundColor3 = value and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(130, 135, 150),
+    }, 0.18)
 end
 
 local function applySmartSnap(frame)
@@ -844,13 +924,13 @@ end
 
 function Section:Toggle(data)
     data = data or {}
-    local row = self:_createRow(34)
+    local row = self:_createRow(40)
     local hasChildren = false
     local expanded = false
 
     local header = create("Frame", {
         BackgroundTransparency = 1,
-        Size = UDim2.new(1, 0, 0, 34),
+        Size = UDim2.new(1, 0, 0, 40),
         Parent = row,
     })
 
@@ -860,15 +940,15 @@ function Section:Toggle(data)
         Font = Enum.Font.Gotham,
         Text = data.Name or "Toggle",
         TextColor3 = Library.Theme.Muted,
-        TextSize = 14,
+        TextSize = 15,
         TextXAlignment = Enum.TextXAlignment.Left,
-        Size = UDim2.new(1, -96, 1, 0),
+        Size = UDim2.new(1, -92, 1, 0),
         Parent = header,
     })
 
     local expander = textLabel(">", 13, Library.Theme.Muted, true)
-    expander.Position = UDim2.new(1, -86, 0, 0)
-    expander.Size = UDim2.fromOffset(22, 34)
+    expander.Position = UDim2.new(1, -88, 0, 0)
+    expander.Size = UDim2.fromOffset(22, 40)
     expander.TextXAlignment = Enum.TextXAlignment.Center
     expander.Visible = false
     expander.Parent = header
@@ -877,8 +957,8 @@ function Section:Toggle(data)
         AutoButtonColor = false,
         BackgroundTransparency = 1,
         Text = "",
-        Position = UDim2.new(1, -48, 0.5, -11),
-        Size = UDim2.fromOffset(44, 22),
+        Position = UDim2.new(1, -48, 0.5, -12),
+        Size = UDim2.fromOffset(44, 24),
         Parent = header,
     })
 
@@ -886,13 +966,13 @@ function Section:Toggle(data)
         BackgroundColor3 = Library.Theme.Off,
         Size = UDim2.fromScale(1, 1),
         Parent = button,
-    }, {corner(12), stroke(Color3.fromRGB(60, 62, 76), 1, 0.35)})
+    }, {corner(12), stroke(Color3.fromRGB(45, 48, 60), 1, 0.35)})
 
     local switchGlow = create("Frame", {
         BackgroundColor3 = Library.Theme.Accent,
         BackgroundTransparency = 0.78,
-        Position = UDim2.fromOffset(-3, -3),
-        Size = UDim2.new(1, 6, 1, 6),
+        Position = UDim2.fromOffset(-4, -4),
+        Size = UDim2.new(1, 8, 1, 8),
         Visible = false,
         ZIndex = 0,
         Parent = button,
@@ -900,15 +980,15 @@ function Section:Toggle(data)
 
     local knob = create("Frame", {
         BackgroundColor3 = Color3.fromRGB(230, 230, 240),
-        Position = UDim2.new(0, 3, 0.5, -8),
-        Size = UDim2.fromOffset(16, 16),
+        Position = UDim2.new(0, 3, 0.5, -9),
+        Size = UDim2.fromOffset(18, 18),
         Parent = track,
     }, {corner(8)})
 
     local childHolder = create("Frame", {
         BackgroundColor3 = Color3.fromRGB(9, 11, 17),
         BackgroundTransparency = 0.18,
-        Position = UDim2.fromOffset(0, 40),
+        Position = UDim2.fromOffset(0, 46),
         Size = UDim2.new(1, 0, 0, 0),
         Visible = false,
         ClipsDescendants = true,
@@ -935,9 +1015,9 @@ function Section:Toggle(data)
     function object:_refresh()
         if hasChildren then
             childHolder.Size = UDim2.new(1, 0, 0, expanded and childHeight() or 0)
-            row.Size = UDim2.new(1, 0, 0, expanded and (44 + childHeight()) or 34)
+            row.Size = UDim2.new(1, 0, 0, expanded and (50 + childHeight()) or 40)
         else
-            row.Size = UDim2.new(1, 0, 0, 34)
+            row.Size = UDim2.new(1, 0, 0, 40)
         end
 
         if self.Page and self.Page.Refresh then
@@ -1079,26 +1159,26 @@ end
 
 function Section:Textbox(data)
     data = data or {}
-    local row = self:_createRow(38)
+    local row = self:_createRow(42)
 
     local label = textLabel(data.Name or "Textbox", 14, Library.Theme.Muted, false)
-    label.Size = UDim2.new(0, 132, 0, 38)
+    label.Size = UDim2.new(0, 132, 0, 42)
     label.Parent = row
 
     local box = create("TextBox", {
-        BackgroundColor3 = Color3.fromRGB(10, 12, 18),
+        BackgroundColor3 = Color3.fromRGB(9, 11, 17),
         ClearTextOnFocus = data.ClearTextOnFocus == true,
         Font = Enum.Font.Gotham,
         PlaceholderText = data.Placeholder or "",
         PlaceholderColor3 = Library.Theme.Muted,
-        Position = UDim2.new(0, 145, 0, 2),
+        Position = UDim2.new(0, 145, 0, 4),
         Size = UDim2.new(1, -147, 0, 34),
         Text = tostring(data.Default or ""),
         TextColor3 = Library.Theme.Text,
         TextSize = 13,
         TextXAlignment = Enum.TextXAlignment.Left,
         Parent = row,
-    }, {corner(7), stroke(Library.Theme.StrokeSoft, 1, 0.2), padding(10, 0, 10, 0)})
+    }, {corner(7), stroke(Color3.fromRGB(25, 27, 38), 1, 0.15), padding(10, 0, 10, 0)})
 
     local object = {
         Type = "Textbox",
@@ -1128,18 +1208,18 @@ function Section:Slider(data)
     local minValue = data.Min or 0
     local maxValue = data.Max or 100
     local decimals = data.Decimals or 0
-    local row = self:_createRow(42)
+    local row = self:_createRow(44)
 
     local label = textLabel(data.Name or "Slider", 14, Library.Theme.Muted, false)
-    label.Size = UDim2.new(0, 135, 1, 0)
+    label.Size = UDim2.new(0, 132, 1, 0)
     label.Parent = row
 
     local valueBox = create("Frame", {
-        BackgroundColor3 = Color3.fromRGB(10, 12, 18),
-        Position = UDim2.new(1, -64, 0.5, -15),
-        Size = UDim2.fromOffset(62, 30),
+        BackgroundColor3 = Color3.fromRGB(9, 11, 17),
+        Position = UDim2.new(1, -68, 0.5, -16),
+        Size = UDim2.fromOffset(64, 32),
         Parent = row,
-    }, {corner(7), stroke(Library.Theme.StrokeSoft, 1, 0.2)})
+    }, {corner(7), stroke(Color3.fromRGB(25, 27, 38), 1, 0.15)})
 
     local valueText = textLabel("", 13, Library.Theme.Text, false)
     valueText.Size = UDim2.fromScale(1, 1)
@@ -1147,9 +1227,9 @@ function Section:Slider(data)
     valueText.Parent = valueBox
 
     local track = create("Frame", {
-        BackgroundColor3 = Color3.fromRGB(8, 9, 14),
-        Position = UDim2.new(0, 145, 0.5, -2),
-        Size = UDim2.new(1, -225, 0, 4),
+        BackgroundColor3 = Color3.fromRGB(7, 8, 12),
+        Position = UDim2.new(0, 142, 0.5, -2),
+        Size = UDim2.new(1, -226, 0, 4),
         Parent = row,
     }, {corner(4)})
 
@@ -1163,7 +1243,7 @@ function Section:Slider(data)
         BackgroundColor3 = Library.Theme.Accent,
         AnchorPoint = Vector2.new(0.5, 0.5),
         Position = UDim2.fromScale(0, 0.5),
-        Size = UDim2.fromOffset(13, 13),
+        Size = UDim2.fromOffset(14, 14),
         Parent = track,
     }, {corner(7)})
 
@@ -1171,8 +1251,8 @@ function Section:Slider(data)
         AutoButtonColor = false,
         BackgroundTransparency = 1,
         Text = "",
-        Position = UDim2.new(0, 145, 0, 0),
-        Size = UDim2.new(1, -225, 1, 0),
+        Position = UDim2.new(0, 142, 0, 0),
+        Size = UDim2.new(1, -226, 1, 0),
         Parent = row,
     })
 
@@ -1250,24 +1330,24 @@ end
 
 function Section:Dropdown(data)
     data = data or {}
-    local row = self:_createRow(38)
+    local row = self:_createRow(42)
     local items = data.Items or {}
     local open = false
     local searchText = ""
     local multi = data.Multi == true or type(data.Default) == "table"
 
     local label = textLabel(data.Name or "Dropdown", 14, Library.Theme.Muted, false)
-    label.Size = UDim2.new(0, 132, 0, 38)
+    label.Size = UDim2.new(0, 132, 0, 42)
     label.Parent = row
 
     local button = create("TextButton", {
         AutoButtonColor = false,
-        BackgroundColor3 = Color3.fromRGB(10, 12, 18),
-        Position = UDim2.new(0, 145, 0, 2),
+        BackgroundColor3 = Color3.fromRGB(9, 11, 17),
+        Position = UDim2.new(0, 145, 0, 4),
         Size = UDim2.new(1, -147, 0, 34),
         Text = "",
         Parent = row,
-    }, {corner(7), stroke(Library.Theme.StrokeSoft, 1, 0.2)})
+    }, {corner(7), stroke(Color3.fromRGB(25, 27, 38), 1, 0.15)})
 
     local selectedText = textLabel("", 14, Library.Theme.Text, false)
     selectedText.Position = UDim2.fromOffset(12, 0)
@@ -1281,19 +1361,19 @@ function Section:Dropdown(data)
     arrow.Parent = button
 
     local optionHolder = create("Frame", {
-        BackgroundColor3 = Color3.fromRGB(10, 12, 18),
-        Position = UDim2.new(0, 145, 0, 39),
+        BackgroundColor3 = Color3.fromRGB(9, 11, 17),
+        Position = UDim2.new(0, 145, 0, 43),
         Size = UDim2.new(1, -147, 0, 0),
         Visible = false,
         ClipsDescendants = true,
         ZIndex = 30,
         Parent = row,
-    }, {corner(7), stroke(Library.Theme.StrokeSoft, 1, 0.2), listLayout(0)})
+    }, {corner(7), stroke(Color3.fromRGB(25, 27, 38), 1, 0.15), listLayout(0)})
 
     local searchBox
     if data.Search ~= false then
         searchBox = create("TextBox", {
-            BackgroundColor3 = Color3.fromRGB(8, 10, 16),
+            BackgroundColor3 = Color3.fromRGB(7, 8, 12),
             ClearTextOnFocus = false,
             Font = Enum.Font.Gotham,
             PlaceholderText = "Search...",
@@ -1341,7 +1421,7 @@ function Section:Dropdown(data)
         local searchHeight = searchBox and 30 or 0
         local height = math.min(#visibleItems * 28 + searchHeight, 226)
         optionHolder.Size = UDim2.new(1, -147, 0, open and height or 0)
-        row.Size = UDim2.new(1, 0, 0, open and (44 + height) or 38)
+        row.Size = UDim2.new(1, 0, 0, open and (48 + height) or 42)
     end
 
     local function rebuild()
@@ -1356,7 +1436,7 @@ function Section:Dropdown(data)
             local selected = object.Multi and containsValue(object.Value, item) or object.Value == item
             local option = create("TextButton", {
                 AutoButtonColor = false,
-                BackgroundColor3 = selected and Color3.fromRGB(24, 20, 38) or Color3.fromRGB(10, 12, 18),
+                BackgroundColor3 = selected and Color3.fromRGB(30, 22, 49) or Color3.fromRGB(9, 11, 17),
                 BorderSizePixel = 0,
                 Font = Enum.Font.Gotham,
                 Text = object.Multi and ((selected and "[x] " or "[ ] ") .. tostring(item)) or tostring(item),
@@ -1370,7 +1450,7 @@ function Section:Dropdown(data)
             })
             create("UIPadding", {PaddingLeft = UDim.new(0, 10), Parent = option})
 
-            bindHover(option, {BackgroundColor3 = Color3.fromRGB(18, 20, 30), TextColor3 = Library.Theme.Text}, {BackgroundColor3 = Color3.fromRGB(10, 12, 18), TextColor3 = Library.Theme.Muted})
+            bindHover(option, {BackgroundColor3 = Color3.fromRGB(18, 20, 30), TextColor3 = Library.Theme.Text}, {BackgroundColor3 = Color3.fromRGB(9, 11, 17), TextColor3 = Library.Theme.Muted})
             connect(option.MouseButton1Click, function()
                 if object.Multi then
                     local values = copyArray(object.Value)
@@ -1386,7 +1466,7 @@ function Section:Dropdown(data)
                     object:Set(item)
                     open = false
                     optionHolder.Visible = false
-                    row.Size = UDim2.new(1, 0, 0, 38)
+                    row.Size = UDim2.new(1, 0, 0, 42)
                     arrow.Text = "v"
                     self:_refresh()
                 end
@@ -1749,10 +1829,10 @@ function Page:Refresh()
     local rightHeight = self.RightLayout.AbsoluteContentSize.Y
     local height = math.max(leftHeight, rightHeight, 1)
 
-    self.LeftColumn.Size = UDim2.new(0.5, -7, 0, leftHeight)
-    self.RightColumn.Size = UDim2.new(0.5, -7, 0, rightHeight)
-    self.Columns.Size = UDim2.new(1, -8, 0, height)
-    self.Scroll.CanvasSize = UDim2.fromOffset(0, height + 22)
+    self.LeftColumn.Size = UDim2.new(0.5, -8, 0, leftHeight)
+    self.RightColumn.Size = UDim2.new(0.5, -8, 0, rightHeight)
+    self.Columns.Size = UDim2.new(1, -4, 0, height)
+    self.Scroll.CanvasSize = UDim2.fromOffset(0, height + 28)
 end
 
 function Page:Section(data)
@@ -1761,29 +1841,30 @@ function Page:Section(data)
 
     local card = create("Frame", {
         BackgroundColor3 = Library.Theme.Panel,
+        BackgroundTransparency = 0.04,
         Size = UDim2.new(1, 0, 0, 0),
         AutomaticSize = Enum.AutomaticSize.Y,
         Parent = parent,
     }, {
-        corner(9),
-        stroke(Library.Theme.StrokeSoft, 1, 0.3),
-        padding(14, 13, 14, 14),
+        corner(8),
+        stroke(Library.Theme.StrokeSoft, 1, 0.28),
+        padding(20, 17, 20, 20),
         listLayout(10),
     })
 
     local header = create("Frame", {
         BackgroundTransparency = 1,
-        Size = UDim2.new(1, 0, 0, 24),
+        Size = UDim2.new(1, 0, 0, 28),
         Parent = card,
     })
 
-    local icon = textLabel(getSectionIcon(data.Name), 18, Library.Theme.Accent, true)
-    icon.Size = UDim2.fromOffset(24, 24)
+    local icon = textLabel(getSectionIcon(data.Name), 21, Library.Theme.Accent, true)
+    icon.Size = UDim2.fromOffset(26, 28)
     icon.TextXAlignment = Enum.TextXAlignment.Center
     icon.Parent = header
 
-    local title = textLabel(data.Name or "Section", 16, Library.Theme.Accent, true)
-    title.Position = UDim2.fromOffset(32, 0)
+    local title = textLabel(data.Name or "Section", 17, Library.Theme.Accent, true)
+    title.Position = UDim2.fromOffset(34, 0)
     title.Size = UDim2.new(1, -32, 1, 0)
     title.Parent = header
 
@@ -1822,7 +1903,27 @@ Window.__index = Window
 function Window:SetOpen(open)
     self.IsOpen = open == true
     if self.Gui then
-        self.Gui.Enabled = self.IsOpen
+        if self.IsOpen then
+            self.Gui.Enabled = true
+            if self.Main and self.Scale and Library.AnimationsEnabled then
+                self.Scale.Scale = math.max(Library.CurrentScale * 0.96, 0.01)
+                self.Main.BackgroundTransparency = 0.14
+                tween(self.Scale, {Scale = Library.CurrentScale}, 0.18)
+                tween(self.Main, {BackgroundTransparency = 0}, 0.18)
+            end
+        elseif self.Main and self.Scale and Library.AnimationsEnabled then
+            tween(self.Scale, {Scale = math.max(Library.CurrentScale * 0.96, 0.01)}, 0.12)
+            tween(self.Main, {BackgroundTransparency = 0.18}, 0.12)
+            task.delay(0.13, function()
+                if self.Gui and not self.IsOpen then
+                    self.Gui.Enabled = false
+                    self.Scale.Scale = Library.CurrentScale
+                    self.Main.BackgroundTransparency = 0
+                end
+            end)
+        else
+            self.Gui.Enabled = self.IsOpen
+        end
     end
 end
 
@@ -1832,14 +1933,31 @@ function Window:_selectPage(page)
     for _, item in ipairs(self.Pages) do
         local active = item == page
         item.Scroll.Visible = active
-        item.SideButton.BackgroundTransparency = active and 0 or 1
-        item.SideButton.TextColor3 = active and Library.Theme.Text or Library.Theme.Muted
-        item.TopButton.TextColor3 = active and Library.Theme.Accent or Library.Theme.Muted
+        tween(item.SideButton, {
+            BackgroundTransparency = active and 0.12 or 1,
+            TextColor3 = active and Library.Theme.Text or Library.Theme.Muted,
+        }, 0.16)
+        tween(item.TopButton, {
+            TextColor3 = active and Library.Theme.Accent or Library.Theme.Muted,
+        }, 0.16)
         item.TopAccent.Visible = active
 
         if item.SideIcon then
-            item.SideIcon.ImageColor3 = active and Library.Theme.Accent or Library.Theme.Muted
+            tween(item.SideIcon, {TextColor3 = active and Library.Theme.Accent or Library.Theme.Muted}, 0.16)
         end
+
+        if item.SideGlow then
+            item.SideGlow.Visible = active
+            tween(item.SideGlow, {BackgroundTransparency = active and 0.86 or 1}, 0.16)
+        end
+
+        if item.TopAccent then
+            item.TopAccent.Size = active and UDim2.new(1, -16, 0, 3) or UDim2.new(0, 0, 0, 3)
+        end
+    end
+
+    if page.Scroll and Library.AnimationsEnabled then
+        page.Scroll.CanvasPosition = Vector2.new(0, 0)
     end
 
     page:Refresh()
@@ -1851,49 +1969,47 @@ function Window:Page(data)
 
     local sideButton = create("TextButton", {
         AutoButtonColor = false,
-        BackgroundColor3 = Color3.fromRGB(21, 18, 34),
+        BackgroundColor3 = Color3.fromRGB(28, 24, 43),
         BackgroundTransparency = 1,
         Font = Enum.Font.GothamSemibold,
         Text = data.Name or ("Page " .. tostring(index)),
         TextColor3 = Library.Theme.Muted,
-        TextSize = 15,
+        TextSize = 19,
         TextXAlignment = Enum.TextXAlignment.Left,
-        Size = UDim2.new(1, 0, 0, 44),
+        Size = UDim2.new(1, 0, 0, 58),
         Parent = self.SideList,
-    }, {corner(8), padding(48, 0, 8, 0), stroke(Library.Theme.Stroke, 1, 0.45)})
+    }, {corner(8), padding(62, 0, 8, 0), stroke(Library.Theme.Stroke, 1, 0.42)})
 
-    local sideIcon
-    if data.Icon then
-        sideIcon = create("ImageLabel", {
-            BackgroundTransparency = 1,
-            Image = normalizeImage(data.Icon),
-            ImageColor3 = Library.Theme.Muted,
-            Position = UDim2.fromOffset(15, 12),
-            Size = UDim2.fromOffset(20, 20),
-            Parent = sideButton,
-        })
-    else
-        local fallback = textLabel(string.sub(data.Name or "P", 1, 1), 16, Library.Theme.Muted, true)
-        fallback.Position = UDim2.fromOffset(15, 0)
-        fallback.Size = UDim2.fromOffset(20, 44)
-        fallback.TextXAlignment = Enum.TextXAlignment.Center
-        fallback.Parent = sideButton
-    end
+    local sideGlow = create("Frame", {
+        BackgroundColor3 = Library.Theme.Glow,
+        BackgroundTransparency = 1,
+        Position = UDim2.fromOffset(-6, -4),
+        Size = UDim2.new(1, 12, 1, 8),
+        Visible = false,
+        ZIndex = 0,
+        Parent = sideButton,
+    }, {corner(10)})
+
+    local sideIcon = textLabel(getPageIcon(data.Name), 25, Library.Theme.Muted, true)
+    sideIcon.Position = UDim2.fromOffset(18, 0)
+    sideIcon.Size = UDim2.fromOffset(28, 58)
+    sideIcon.TextXAlignment = Enum.TextXAlignment.Center
+    sideIcon.Parent = sideButton
 
     local topButton = create("TextButton", {
         AutoButtonColor = false,
         BackgroundTransparency = 1,
         Font = Enum.Font.GothamSemibold,
-        Text = data.Name or ("Page " .. tostring(index)),
+        Text = getPageIcon(data.Name) .. "   " .. (data.Name or ("Page " .. tostring(index))),
         TextColor3 = Library.Theme.Muted,
-        TextSize = 14,
-        Size = UDim2.fromOffset(104, 48),
+        TextSize = 16,
+        Size = UDim2.fromOffset(math.max(132, (#tostring(data.Name or "") * 8) + 58), 58),
         Parent = self.TopTabs,
     })
 
     local topAccent = create("Frame", {
         BackgroundColor3 = Library.Theme.Accent,
-        Position = UDim2.new(0, 8, 1, -3),
+        Position = UDim2.new(0, 8, 1, -4),
         Size = UDim2.new(1, -16, 0, 3),
         Visible = false,
         Parent = topButton,
@@ -1904,8 +2020,8 @@ function Window:Page(data)
         BorderSizePixel = 0,
         ScrollBarThickness = 2,
         ScrollBarImageColor3 = Library.Theme.Accent,
-        Position = UDim2.fromOffset(0, 74),
-        Size = UDim2.new(1, 0, 1, -74),
+        Position = UDim2.fromOffset(0, 82),
+        Size = UDim2.new(1, 0, 1, -82),
         CanvasSize = UDim2.fromOffset(0, 0),
         Visible = false,
         Parent = self.Content,
@@ -1914,21 +2030,21 @@ function Window:Page(data)
     local columns = create("Frame", {
         BackgroundTransparency = 1,
         Position = UDim2.fromOffset(0, 0),
-        Size = UDim2.new(1, -8, 0, 0),
+        Size = UDim2.new(1, -4, 0, 0),
         Parent = scroll,
     })
 
     local leftColumn = create("Frame", {
         BackgroundTransparency = 1,
         Position = UDim2.fromOffset(0, 0),
-        Size = UDim2.new(0.5, -7, 0, 0),
+        Size = UDim2.new(0.5, -8, 0, 0),
         Parent = columns,
     }, {listLayout(10)})
 
     local rightColumn = create("Frame", {
         BackgroundTransparency = 1,
-        Position = UDim2.new(0.5, 7, 0, 0),
-        Size = UDim2.new(0.5, -7, 0, 0),
+        Position = UDim2.new(0.5, 8, 0, 0),
+        Size = UDim2.new(0.5, -8, 0, 0),
         Parent = columns,
     }, {listLayout(10)})
 
@@ -1942,6 +2058,7 @@ function Window:Page(data)
         RightLayout = rightColumn:FindFirstChildOfClass("UIListLayout"),
         SideButton = sideButton,
         SideIcon = sideIcon,
+        SideGlow = sideGlow,
         TopButton = topButton,
         TopAccent = topAccent,
         Window = self,
@@ -1992,8 +2109,8 @@ function Library:Window(data)
 
     local camera = workspace.CurrentCamera
     local viewport = camera and camera.ViewportSize or Vector2.new(1366, 768)
-    local width = math.min(980, math.max(780, viewport.X - 72))
-    local height = math.min(640, math.max(540, viewport.Y - 72))
+    local width = math.min(1490, math.max(1040, viewport.X - 48))
+    local height = math.min(980, math.max(720, viewport.Y - 48))
 
     local main = create("Frame", {
         Name = "Main",
@@ -2002,7 +2119,9 @@ function Library:Window(data)
         Position = UDim2.fromScale(0.5, 0.5),
         Size = UDim2.fromOffset(width, height),
         Parent = gui,
-    }, {corner(14), stroke(self.Theme.Stroke, 1, 0)})
+    }, {corner(18), stroke(self.Theme.Stroke, 1, 0)})
+
+    local mainGlow = addSoftGlow(main, 18, self.Theme.Glow, 0.9)
 
     local uiScale = create("UIScale", {
         Scale = normalizeScale(self.CurrentScale),
@@ -2021,13 +2140,13 @@ function Library:Window(data)
 
     local sidebar = create("Frame", {
         BackgroundColor3 = self.Theme.Sidebar,
-        BackgroundTransparency = 0.08,
-        Size = UDim2.new(0, 188, 1, 0),
+        BackgroundTransparency = 0.04,
+        Size = UDim2.new(0, 268, 1, 0),
         Parent = main,
-    }, {corner(14)})
+    }, {corner(18)})
 
     create("Frame", {
-        BackgroundColor3 = self.Theme.StrokeSoft,
+        BackgroundColor3 = Color3.fromRGB(20, 23, 34),
         BorderSizePixel = 0,
         Position = UDim2.new(1, 0, 0, 0),
         Size = UDim2.new(0, 1, 1, 0),
@@ -2036,9 +2155,35 @@ function Library:Window(data)
 
     local logoArea = create("Frame", {
         BackgroundTransparency = 1,
-        Size = UDim2.new(1, 0, 0, 154),
+        Size = UDim2.new(1, 0, 0, 228),
         Parent = sidebar,
     })
+
+    for _, dot in ipairs({
+        {36, 56, 4, 0.4},
+        {72, 34, 3, 0.55},
+        {202, 64, 3, 0.5},
+        {220, 118, 2, 0.62},
+    }) do
+        local sparkle = create("Frame", {
+            BackgroundColor3 = self.Theme.Accent,
+            BackgroundTransparency = dot[4],
+            Position = UDim2.fromOffset(dot[1], dot[2]),
+            Size = UDim2.fromOffset(dot[3], dot[3]),
+            Parent = logoArea,
+        }, {corner(dot[3])})
+
+        if self.AnimationsEnabled then
+            task.spawn(function()
+                while sparkle.Parent do
+                    tween(sparkle, {BackgroundTransparency = math.min(dot[4] + 0.25, 0.9)}, 0.8)
+                    task.wait(0.8)
+                    tween(sparkle, {BackgroundTransparency = dot[4]}, 0.8)
+                    task.wait(0.8)
+                end
+            end)
+        end
+    end
 
     local logo
     if data.Logo then
@@ -2047,9 +2192,9 @@ function Library:Window(data)
             Image = normalizeImage(data.Logo),
             ImageColor3 = Color3.new(1, 1, 1),
             AnchorPoint = Vector2.new(0.5, 0),
-            Position = UDim2.new(0.5, 0, 0, 18),
+            Position = UDim2.new(0.5, 0, 0, 34),
             ScaleType = Enum.ScaleType.Fit,
-            Size = UDim2.fromOffset(92, 76),
+            Size = UDim2.fromOffset(134, 112),
             Parent = logoArea,
         })
     else
@@ -2058,53 +2203,81 @@ function Library:Window(data)
         logo.Position = UDim2.new(0.5, 0, 0, 16)
     end
 
-    local name = textLabel(data.Name or "Amongus.hook", 20, self.Theme.Text, true)
-    name.TextXAlignment = Enum.TextXAlignment.Center
-    name.Position = UDim2.fromOffset(0, 104)
-    name.Size = UDim2.new(1, 0, 0, 26)
-    name.Parent = logoArea
+    local displayName = data.Name or "Amongus.hook"
+    local nameHolder = create("Frame", {
+        BackgroundTransparency = 1,
+        Position = UDim2.fromOffset(0, 154),
+        Size = UDim2.new(1, 0, 0, 34),
+        Parent = logoArea,
+    })
 
-    local subName = textLabel(data.SubName or "CS2 CHEAT", 11, self.Theme.Accent, true)
+    local nameFont = Enum.Font.GothamSemibold
+    local before, after = displayName, ""
+    local dotPosition = string.find(displayName, "%.")
+    if dotPosition then
+        before = string.sub(displayName, 1, dotPosition)
+        after = string.sub(displayName, dotPosition + 1)
+    end
+
+    local beforeSize = TextService:GetTextSize(before, 28, nameFont, Vector2.new(400, 34)).X
+    local afterSize = TextService:GetTextSize(after, 28, nameFont, Vector2.new(400, 34)).X
+    local totalNameWidth = beforeSize + afterSize
+
+    local name = textLabel(before, 28, self.Theme.Text, true)
+    name.Font = nameFont
+    name.Position = UDim2.new(0.5, -totalNameWidth / 2, 0, 0)
+    name.Size = UDim2.fromOffset(beforeSize, 34)
+    name.TextXAlignment = Enum.TextXAlignment.Left
+    name.Parent = nameHolder
+
+    local nameAccent = textLabel(after, 28, self.Theme.Accent, true)
+    nameAccent.Font = nameFont
+    nameAccent.Position = UDim2.new(0.5, -totalNameWidth / 2 + beforeSize, 0, 0)
+    nameAccent.Size = UDim2.fromOffset(afterSize, 34)
+    nameAccent.TextXAlignment = Enum.TextXAlignment.Left
+    nameAccent.Parent = nameHolder
+
+    local subName = textLabel(data.SubName or "uilib", 14, self.Theme.Accent, true)
     subName.TextXAlignment = Enum.TextXAlignment.Center
-    subName.Position = UDim2.fromOffset(0, 130)
-    subName.Size = UDim2.new(1, 0, 0, 18)
+    subName.Position = UDim2.fromOffset(0, 190)
+    subName.Size = UDim2.new(1, 0, 0, 20)
     subName.Parent = logoArea
 
     local sideList = create("Frame", {
         BackgroundTransparency = 1,
-        Position = UDim2.fromOffset(24, 166),
-        Size = UDim2.new(1, -48, 1, -260),
+        Position = UDim2.fromOffset(22, 250),
+        Size = UDim2.new(1, -44, 1, -378),
         Parent = sidebar,
     }, {listLayout(9)})
 
     local status = create("Frame", {
         BackgroundColor3 = self.Theme.PanelLight,
         BackgroundTransparency = 0.08,
-        Position = UDim2.new(0, 24, 1, -86),
-        Size = UDim2.new(1, -48, 0, 66),
+        Position = UDim2.new(0, 22, 1, -118),
+        Size = UDim2.new(1, -44, 0, 92),
         Parent = sidebar,
-    }, {corner(8), stroke(self.Theme.StrokeSoft, 1, 0.25), padding(12, 9, 12, 9)})
+    }, {corner(8), stroke(self.Theme.StrokeSoft, 1, 0.25), padding(18, 13, 18, 13)})
 
-    local statusTitle = textLabel(data.Name or "Amongus.hook", 13, self.Theme.Accent, true)
-    statusTitle.Size = UDim2.new(1, -18, 0, 18)
+    local statusTitle = textLabel(data.Name or "Amongus.hook", 15, self.Theme.Accent, true)
+    statusTitle.Size = UDim2.new(1, -18, 0, 22)
     statusTitle.Parent = status
 
     local statusDot = create("Frame", {
         BackgroundColor3 = self.Theme.Green,
         AnchorPoint = Vector2.new(1, 0),
-        Position = UDim2.new(1, 0, 0, 6),
-        Size = UDim2.fromOffset(9, 9),
+        Position = UDim2.new(1, 0, 0, 8),
+        Size = UDim2.fromOffset(12, 12),
         Parent = status,
     }, {corner(9)})
 
-    local version = textLabel("Version: 1.0.0", 12, self.Theme.Muted, false)
-    version.Position = UDim2.fromOffset(0, 22)
-    version.Size = UDim2.new(1, 0, 0, 16)
+    local version = textLabel("Version: 1.0.0", 13, self.Theme.Muted, false)
+    version.Position = UDim2.fromOffset(0, 30)
+    version.Size = UDim2.new(1, 0, 0, 18)
     version.Parent = status
 
-    local injected = textLabel("Status: Injected", 12, self.Theme.Green, false)
-    injected.Position = UDim2.fromOffset(0, 42)
-    injected.Size = UDim2.new(1, 0, 0, 16)
+    local injected = textLabel("Status: Ready", 13, self.Theme.Green, false)
+    injected.Position = UDim2.fromOffset(0, 58)
+    injected.Size = UDim2.new(1, 0, 0, 18)
     injected.Parent = status
 
     local watermark = create("Frame", {
@@ -2127,14 +2300,14 @@ function Library:Window(data)
 
     local content = create("Frame", {
         BackgroundTransparency = 1,
-        Position = UDim2.fromOffset(202, 16),
-        Size = UDim2.new(1, -218, 1, -32),
+        Position = UDim2.fromOffset(290, 22),
+        Size = UDim2.new(1, -312, 1, -44),
         Parent = main,
     })
 
     local top = create("Frame", {
         BackgroundTransparency = 1,
-        Size = UDim2.new(1, 0, 0, 58),
+        Size = UDim2.new(1, 0, 0, 68),
         Parent = content,
     })
 
@@ -2145,13 +2318,13 @@ function Library:Window(data)
         ClipsDescendants = true,
         ScrollBarThickness = 0,
         ScrollingDirection = Enum.ScrollingDirection.X,
-        Size = UDim2.new(1, -160, 1, 0),
+        Size = UDim2.new(1, -190, 1, 0),
         Parent = top,
     }, {
         create("UIListLayout", {
             FillDirection = Enum.FillDirection.Horizontal,
             SortOrder = Enum.SortOrder.LayoutOrder,
-            Padding = UDim.new(0, 12),
+            Padding = UDim.new(0, 18),
         }),
     })
 
@@ -2160,18 +2333,18 @@ function Library:Window(data)
         topTabs.CanvasSize = UDim2.fromOffset(topTabsLayout.AbsoluteContentSize.X + 8, 0)
     end)
 
-    local product = textLabel("CS2  -  Prime", 14, self.Theme.Text, true)
+    local product = textLabel("CS2  -  Prime", 16, self.Theme.Text, true)
     product.AnchorPoint = Vector2.new(1, 0)
-    product.Position = UDim2.new(1, -36, 0, 15)
-    product.Size = UDim2.fromOffset(120, 28)
+    product.Position = UDim2.new(1, -38, 0, 23)
+    product.Size = UDim2.fromOffset(142, 28)
     product.TextXAlignment = Enum.TextXAlignment.Right
     product.Parent = top
 
     create("Frame", {
         BackgroundColor3 = self.Theme.Accent,
         AnchorPoint = Vector2.new(1, 0),
-        Position = UDim2.new(1, -128, 0, 24),
-        Size = UDim2.fromOffset(9, 9),
+        Position = UDim2.new(1, -148, 0, 32),
+        Size = UDim2.fromOffset(12, 12),
         Parent = top,
     }, {corner(9)})
 
@@ -2182,8 +2355,8 @@ function Library:Window(data)
         Text = "X",
         TextColor3 = self.Theme.Muted,
         TextSize = 18,
-        Position = UDim2.new(1, -24, 0, 7),
-        Size = UDim2.fromOffset(24, 24),
+        Position = UDim2.new(1, -24, 0, 13),
+        Size = UDim2.fromOffset(28, 28),
         Parent = top,
     })
 
@@ -2194,8 +2367,8 @@ function Library:Window(data)
         Text = "-",
         TextColor3 = self.Theme.Muted,
         TextSize = 20,
-        Position = UDim2.new(1, -58, 0, 6),
-        Size = UDim2.fromOffset(24, 24),
+        Position = UDim2.new(1, -64, 0, 12),
+        Size = UDim2.fromOffset(28, 28),
         Parent = top,
     })
 
@@ -2203,7 +2376,7 @@ function Library:Window(data)
         BackgroundColor3 = self.Theme.StrokeSoft,
         BackgroundTransparency = 0.15,
         BorderSizePixel = 0,
-        Position = UDim2.fromOffset(0, 62),
+        Position = UDim2.fromOffset(0, 78),
         Size = UDim2.new(1, 0, 0, 1),
         Parent = content,
     })
@@ -2211,6 +2384,7 @@ function Library:Window(data)
     local window = setmetatable({
         Gui = gui,
         Main = main,
+        MainGlow = mainGlow,
         Scale = uiScale,
         Watermark = watermark,
         WatermarkScale = watermarkScale,
@@ -2234,7 +2408,7 @@ function Library:Window(data)
 
     makeDraggable(top, main)
 
-    local menuKeybind = data.MenuKeybind or Enum.KeyCode.End
+    local menuKeybind = data.MenuKeybind or Enum.KeyCode.RightShift
     connect(UserInputService.InputBegan, function(input, gameProcessed)
         if gameProcessed then
             return
